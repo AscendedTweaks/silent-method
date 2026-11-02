@@ -83,7 +83,7 @@
   <details class="card"><summary>What does it change?</summary><p>Only the MP4 container: moov first, audio/video interleaving, extra sample-table entries, the bitrate box, timestamps and editor metadata.</p></details>
   <details class="card"><summary>Is my video re-encoded?</summary><p>No. Every video frame and audio sample stays bit-identical.</p></details>
   <details class="card"><summary>Is my file uploaded anywhere?</summary><p>No. It is processed in this tab.</p></details>
-  <details class="card"><summary>Which files work?</summary><p>MP4 or MOV up to 4 GB, not fragmented.</p></details>
+  <details class="card"><summary>Which files work?</summary><p>MP4 or MOV up to 5 minutes and 4 GB, not fragmented.</p></details>
   <details class="card"><summary>Does it always work?</summary><p>No guarantee: TikTok can change its pipeline any time. Upload on desktop web, not in the app.</p></details>
 </section>
 </main>
@@ -94,6 +94,7 @@
 // fake 8-byte video samples in stsz/stco up to duration*400 (not in stts, players ignore them),
 // last video frame duration 1, btrt max=avg, pasp 1:1, zeroed timestamps, udta/meta removed.
 const FAKE_PER_SEC = 400;
+const MAX_SEC = 300; // 5 min limit per video
 const FAKE = new Uint8Array([0, 0, 0, 4, 0, 0, 0, 0]);
 const dv = u => new DataView(u.buffer, u.byteOffset, u.byteLength);
 const str = (u, o) => String.fromCharCode(u[o], u[o + 1], u[o + 2], u[o + 3]);
@@ -192,6 +193,7 @@ async function silentPatch(read, fileSize) {
   const tracks = [...children(moov)].filter(([t]) => t === 'trak').map(([, b]) => trackInfo(b));
   const video = tracks.findIndex(tr => tr.handler === 'vide');
   if (video < 0) throw new Error('no video track');
+  if (tracks[video].duration / tracks[video].timescale > MAX_SEC) throw new Error('video longer than 5 minutes');
 
   // interleave by presentation time, video before audio on ties; consecutive video frames share a chunk
   const ev = [];

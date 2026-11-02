@@ -16,4 +16,4 @@ Free, open-source alternative to paid "TikTok upload methods". Patches an MP4 so
 - `btrt` max bitrate = average bitrate, `pasp` 1:1
 - creation/modification times zeroed, `udta`/`meta` removed (e.g. CapCut tags)
 
-Limits: MP4/MOV, max 4 GB, no fragmented MP4. No guarantee: TikTok can change its pipeline any time.
+Limits: MP4/MOV, max 5 minutes, max 4 GB, no fragmented MP4. No guarantee: TikTok can change its pipeline any time.
