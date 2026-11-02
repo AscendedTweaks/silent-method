@@ -5,58 +5,89 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Silent Method</title>
 <style>
-  :root { --bg: #08080a; --card: #141417; --line: #26262b; --text: #f4f4f5; --mute: #9a9aa3; --accent: #7c5cff; }
+  :root { --text: #f5f5f7; --mute: #8e8e93; --glass: rgba(255,255,255,.05); --glass2: rgba(255,255,255,.075);
+    --hair: inset 0 .5px 0 rgba(255,255,255,.11), inset 0 -.5px 0 rgba(0,0,0,.6); }
   * { box-sizing: border-box; }
-  body { margin: 0; background: radial-gradient(900px 500px at 50% -10%, #1d1b2e, var(--bg) 70%) var(--bg);
-    color: var(--text); font: 15px/1.5 Inter, "Segoe UI", system-ui, sans-serif; }
-  nav, main { max-width: 760px; margin: 0 auto; padding: 0 16px; }
-  nav { display: flex; justify-content: space-between; align-items: center; height: 64px; font-weight: 700; }
-  nav a { color: var(--mute); text-decoration: none; font-weight: 500; }
-  .logo { display: flex; gap: 10px; align-items: center; }
-  .logo i { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), #2dd4bf); }
-  header { text-align: center; padding: 56px 0 32px; }
-  .badge { display: inline-block; padding: 6px 14px; border: 1px solid var(--line); border-radius: 99px;
-    background: var(--card); color: var(--mute); font-size: 11px; font-weight: 700; letter-spacing: .12em; }
-  h1 { font-size: clamp(36px, 8vw, 60px); line-height: 1.05; letter-spacing: -.04em; margin: 22px 0 14px; }
-  .sub { color: var(--mute); max-width: 520px; margin: 0 auto; }
-  .feats { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; margin-top: 22px; color: var(--mute); font-size: 13px; }
-  .feats span::before { content: "✓ "; color: #2dd4bf; }
-  #drop { margin: 28px 0 16px; padding: 44px 16px; text-align: center; cursor: pointer; border: 1.5px dashed var(--line);
-    border-radius: 22px; background: var(--card); transition: border-color .15s, background .15s; }
-  #drop.over, #drop:hover { border-color: var(--accent); background: #18171f; }
-  .btn { display: inline-block; padding: 12px 22px; border-radius: 99px; background: var(--text); color: #000;
-    font-weight: 700; text-decoration: none; }
-  #drop p { color: var(--mute); margin: 12px 0 0; font-size: 13px; }
-  #log { list-style: none; padding: 0; margin: 0; }
-  #log li { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center;
-    padding: 14px 18px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); font-size: 14px; }
-  #log a { padding: 8px 16px; border-radius: 99px; background: var(--accent); color: #fff; font-weight: 700; text-decoration: none; }
-  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 36px 0; }
-  .steps div { padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--card); }
-  .steps b { display: block; color: var(--accent); font-size: 12px; letter-spacing: .1em; margin-bottom: 4px; }
-  .steps p { margin: 0; color: var(--mute); font-size: 14px; }
-  footer { text-align: center; color: var(--mute); font-size: 12px; padding: 24px 0 48px; }
+  body { margin: 0; background: #000; color: var(--text); letter-spacing: -.01em;
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+  nav { position: sticky; top: 0; z-index: 9; background: rgba(9,10,13,.78); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  nav > div, main, footer > div { max-width: 880px; margin: 0 auto; padding: 0 16px; }
+  nav > div { display: flex; justify-content: space-between; align-items: center; height: 56px; }
+  .logo { display: flex; gap: 10px; align-items: center; font-weight: 700; }
+  nav a { color: var(--text); text-decoration: none; font-size: 14px; font-weight: 600; padding: 8px 14px; border-radius: 99px; background: var(--glass2); }
+  header { text-align: center; padding: 80px 0 0; }
+  .chip { display: inline-block; padding: 6px 12px; border-radius: 99px; background: var(--glass2); color: var(--mute);
+    font-size: 11px; font-weight: 700; letter-spacing: .14em; }
+  h1 { font-size: clamp(40px, 9vw, 64px); line-height: 1.02; letter-spacing: -.03em; font-weight: 750; margin: 20px 0 16px; color: #fff; }
+  h2 { font-size: 12px; font-weight: 700; letter-spacing: .14em; color: var(--mute); text-align: center; margin: 72px 0 16px; }
+  .sub { color: var(--mute); max-width: 500px; margin: 0 auto; }
+  .pills { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
+  .btn { display: inline-flex; align-items: center; height: 48px; padding: 0 22px; border-radius: 22px; font-size: 15px;
+    font-weight: 650; text-decoration: none; cursor: pointer; }
+  .w { background: var(--text); color: #0a0a0c; }
+  .g { background: var(--glass2); color: var(--text); }
+  .feats { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 24px; margin-top: 28px; color: var(--mute); font-size: 13px; }
+  .feats b { padding: 1px 6px; margin-right: 6px; border-radius: 6px; background: var(--glass2); color: var(--text); font-size: 10px; }
+  .card { background: var(--glass); box-shadow: var(--hair); border-radius: 28px; }
+  #drop { margin-top: 56px; padding: 56px 16px; text-align: center; cursor: pointer; outline: 1.5px dashed rgba(255,255,255,.12);
+    outline-offset: -12px; transition: background .15s; }
+  #drop.over, #drop:hover { background: var(--glass2); }
+  #drop p { color: var(--mute); margin: 14px 0 0; font-size: 14px; }
+  #log { list-style: none; padding: 0; margin: 12px 0 0; }
+  #log li { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; padding: 14px 18px;
+    margin-bottom: 10px; background: var(--glass); box-shadow: var(--hair); border-radius: 20px; font-size: 14px; }
+  #log a { padding: 8px 16px; border-radius: 99px; background: var(--text); color: #0a0a0c; font-weight: 650; text-decoration: none; }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .steps div { padding: 16px 18px; }
+  .steps b { font-size: 11px; letter-spacing: .14em; color: var(--mute); }
+  .steps strong { display: block; margin: 4px 0 2px; }
+  .steps p, details p { margin: 0; color: var(--mute); font-size: 14px; }
+  .faq { max-width: 700px; margin: 0 auto; }
+  details { margin-bottom: 10px; padding: 0 18px; border-radius: 20px; }
+  summary { cursor: pointer; list-style: none; padding: 14px 0; font-weight: 650; display: flex; justify-content: space-between; gap: 12px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "+"; color: var(--mute); }
+  details[open] summary::after { content: "\2013"; }
+  details p { padding-bottom: 16px; }
+  footer { margin-top: 96px; border-top: 1px solid rgba(255,255,255,.08); color: var(--mute); font-size: 13px; }
+  footer > div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-top: 28px; padding-bottom: 48px; }
+  footer a { color: var(--mute); }
 </style>
 </head>
 <body>
-<nav><span class="logo"><i></i>Silent Method</span><a href="https://github.com/AscendedTweaks/silent-method">GitHub</a></nav>
+<nav><div>
+  <span class="logo"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect width="20" height="20" rx="6" fill="#f5f5f7"/><path d="M6 10h8" stroke="#000" stroke-width="2.4" stroke-linecap="round"/></svg>Silent Method</span>
+  <a href="https://github.com/AscendedTweaks/silent-method">GitHub</a>
+</div></nav>
 <main>
 <header>
-  <span class="badge">FREE · OPEN SOURCE · NO SIGN-UP</span>
-  <h1>Upload in full quality.<br>For free.</h1>
-  <p class="sub">Patches your MP4 right in the browser so TikTok keeps resolution and frame rate. The file never leaves your PC.</p>
-  <div class="feats"><span>No re-encode</span><span>Runs locally</span><span>4K & 60 fps</span><span>Batch</span></div>
+  <span class="chip">FREE · OPEN SOURCE</span>
+  <h1>Full quality.<br>Zero cost.</h1>
+  <p class="sub">Patch your MP4 in the browser so TikTok keeps resolution and frame rate. No account, no upload, no re-encode.</p>
+  <div class="pills"><a class="btn w" href="#drop">Patch a video</a><a class="btn g" href="https://github.com/AscendedTweaks/silent-method">View source</a></div>
+  <div class="feats"><span><b>HD</b>Bit-identical frames</span><span><b>4K</b>Up to 4K · 60 fps</span><span><b>1s</b>Done in a second</span><span><b>0</b>No sign-up</span></div>
 </header>
-<div id="drop"><span class="btn">Choose video</span><p>or drop MP4 / MOV files here</p>
+<div id="drop" class="card"><span class="btn w">Choose video</span><p>or drop MP4 / MOV files here · several at once work</p>
   <input id="pick" type="file" accept="video/mp4,video/quicktime,.mp4,.mov" multiple hidden></div>
 <ul id="log"></ul>
+
+<h2>HOW IT WORKS</h2>
 <section class="steps">
-  <div><b>STEP 1</b><p>Drop your exported video above.</p></div>
-  <div><b>STEP 2</b><p>Save the <strong>_tt.mp4</strong> it gives you.</p></div>
-  <div><b>STEP 3</b><p>Upload it on tiktok.com (TikTok Studio, desktop) with "High quality uploads" on.</p></div>
+  <div class="card"><b>STEP 1</b><strong>Drop</strong><p>Your exported MP4 or MOV.</p></div>
+  <div class="card"><b>STEP 2</b><strong>Save</strong><p>The _tt.mp4 downloads automatically.</p></div>
+  <div class="card"><b>STEP 3</b><strong>Upload</strong><p>On tiktok.com in TikTok Studio, with "High quality uploads" on.</p></div>
+</section>
+
+<h2>FAQ</h2>
+<section class="faq">
+  <details class="card"><summary>What does it change?</summary><p>Only the MP4 container: moov first, audio/video interleaving, extra sample-table entries, the bitrate box, timestamps and editor metadata.</p></details>
+  <details class="card"><summary>Is my video re-encoded?</summary><p>No. Every video frame and audio sample stays bit-identical.</p></details>
+  <details class="card"><summary>Is my file uploaded anywhere?</summary><p>No. It is processed in this tab.</p></details>
+  <details class="card"><summary>Which files work?</summary><p>MP4 or MOV up to 4 GB, not fragmented.</p></details>
+  <details class="card"><summary>Does it always work?</summary><p>No guarantee: TikTok can change its pipeline any time. Upload on desktop web, not in the app.</p></details>
 </section>
 </main>
-<footer>Container-only patch. Video and audio stay bit-identical. No guarantee: TikTok can change its pipeline any time.</footer>
+<footer><div><span>Silent Method · free and open source</span><span>Not affiliated with TikTok.</span></div></footer>
 
 <script>
 // Container rewrite (no re-encode): faststart, audio/video interleave per audio frame,

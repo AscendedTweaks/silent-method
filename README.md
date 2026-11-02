@@ -2,9 +2,9 @@
 
 Free, open-source alternative to paid "TikTok upload methods". Patches an MP4 so TikTok keeps max quality.
 
-**Use it:** open https://ascendedtweaks.github.io/silent-method/ or download `index.html` and open it in any browser. Drop a video in, get `<name>_tt.mp4`, upload that on tiktok.com (TikTok Studio, desktop) with "High quality uploads" on.
+**Use it:** open https://ascendedtweaks.github.io/silent-method/. Drop a video in, get `<name>_tt.mp4`, upload that on tiktok.com (TikTok Studio, desktop) with "High quality uploads" on.
 
-- No install, no account, works offline.
+- No install, no account.
 - Nothing is uploaded: the file is processed in your browser.
 - No re-encode: video and audio stay bit-identical.
 
