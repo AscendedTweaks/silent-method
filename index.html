@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Silent Method</title>
+<style>
+  body { font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+  #drop { border: 2px dashed #888; padding: 40px; text-align: center; cursor: pointer; }
+  #drop.over { background: #eee; }
+  li { margin: 6px 0; }
+</style>
+</head>
+<body>
+<h1>Silent Method</h1>
+<p>Patch an MP4 so TikTok keeps max quality. No re-encode, nothing is uploaded: the file stays in your browser.</p>
+<div id="drop">Drop MP4 here or click to choose<input id="pick" type="file" accept="video/mp4,video/quicktime,.mp4,.mov" multiple hidden></div>
+<ul id="log"></ul>
+<p>Then upload the <b>_tt.mp4</b> on tiktok.com (desktop, TikTok Studio) with "High quality uploads" on.</p>
+
+<script>
+// Container rewrite (no re-encode): faststart, audio/video interleave per audio frame,
+// fake 8-byte video samples in stsz/stco up to duration*400 (not in stts, players ignore them),
+// last video frame duration 1, btrt max=avg, pasp 1:1, zeroed timestamps, udta/meta removed.
+const FAKE_PER_SEC = 400;
+const FAKE = new Uint8Array([0, 0, 0, 4, 0, 0, 0, 0]);
+const dv = u => new DataView(u.buffer, u.byteOffset, u.byteLength);
+const str = (u, o) => String.fromCharCode(u[o], u[o + 1], u[o + 2], u[o + 3]);
+const u32 = (u, o) => dv(u).getUint32(o);
+
+function cat(arrs) {
+  const out = new Uint8Array(arrs.reduce((n, a) => n + a.length, 0));
+  let p = 0;
+  for (const a of arrs) { out.set(a, p); p += a.length; }
+  return out;
+}
+function be(...vals) { // big-endian uint32s, arrays get flattened (no huge spreads)
+  vals = vals.flat(Infinity);
+  const u = new Uint8Array(vals.length * 4), d = dv(u);
+  vals.forEach((v, i) => d.setUint32(i * 4, v));
+  return u;
+}
+function box(type, payload) {
+  const h = be(8 + payload.length, 0);
+  for (let i = 0; i < 4; i++) h[4 + i] = type.charCodeAt(i);
+  return cat([h, payload]);
+}
+function* children(u, start = 0) {
+  for (let p = start; p < u.length;) {
+    let size = u32(u, p), h = 8;
+    if (size === 1) { size = Number(dv(u).getBigUint64(p + 8)); h = 16; } else if (size === 0) size = u.length - p;
+    yield [str(u, p + 4), u.subarray(p + h, p + size)];
+    p += size;
+  }
+}
+function find(u, ...path) {
+  for (const [t, b] of children(u)) if (t === path[0]) return path.length === 1 ? b : find(b, ...path.slice(1));
+}
+function rle(vals) {
+  const out = [];
+  for (const v of vals) out.length && out[out.length - 1][1] === v ? out[out.length - 1][0]++ : out.push([1, v]);
+  return out;
+}
+const zeroTimes = b => { const c = b.slice(), n = b[0] === 0 ? 8 : 16; c.fill(0, 4, 4 + n); return c; };
+
+function trackInfo(trak) {
+  const stbl = [...children(find(trak, 'mdia', 'minf', 'stbl'))], st = Object.fromEntries(stbl);
+  const mdhd = find(trak, 'mdia', 'mdhd'), md = dv(mdhd);
+  const [timescale, duration] = mdhd[0] === 0 ? [md.getUint32(12), md.getUint32(16)] : [md.getUint32(20), Number(md.getBigUint64(24))];
+  const deltas = [];
+  for (let k = 0, s = st.stts; k < u32(s, 4); k++) for (let c = u32(s, 8 + 8 * k), d = u32(s, 12 + 8 * k); c--;) deltas.push(d);
+  const z = st.stsz, ss = u32(z, 4), n = u32(z, 8), sizes = [];
+  for (let k = 0; k < Math.min(n, deltas.length); k++) sizes.push(ss || u32(z, 12 + 4 * k)); // only timed samples: re-patching works
+  const chunks = [];
+  if (st.stco) for (let k = 0; k < u32(st.stco, 4); k++) chunks.push(u32(st.stco, 8 + 4 * k));
+  else for (let k = 0; k < u32(st.co64, 4); k++) chunks.push(Number(dv(st.co64).getBigUint64(8 + 8 * k)));
+  const stsc = [];
+  for (let k = 0; k < u32(st.stsc, 4); k++) stsc.push([u32(st.stsc, 8 + 12 * k), u32(st.stsc, 12 + 12 * k), u32(st.stsc, 16 + 12 * k)]);
+  if (u32(st.stsd, 4) !== 1 || stsc.some(e => e[2] !== 1)) throw new Error('multiple sample descriptions not supported');
+  const offs = [];
+  for (let ci = 0, ei = 0; ci < chunks.length; ci++) {
+    while (ei + 1 < stsc.length && stsc[ei + 1][0] <= ci + 1) ei++;
+    for (let k = 0, o = chunks[ci]; k < stsc[ei][1] && offs.length < sizes.length; k++) { offs.push(o); o += sizes[offs.length - 1]; }
+  }
+  let shift = 0; // shortcut: media_time of first edit only, empty edits (delays) ignored
+  const elst = find(trak, 'edts', 'elst');
+  if (elst) for (let k = 0; k < u32(elst, 4); k++) {
+    const t = elst[0] === 0 ? dv(elst).getInt32(12 + 8 * k) : Number(dv(elst).getBigInt64(16 + 16 * k));
+    if (t !== -1) { shift = t; break; }
+  }
+  const dts = [];
+  deltas.reduce((t, d) => (dts.push(t), t + d), 0);
+  return { handler: str(find(trak, 'mdia', 'hdlr'), 8), stbl, timescale, duration, deltas, sizes, offs, shift, dts };
+}
+
+function patchStsd(b, tr) {
+  const esize = u32(b, 8), etype = str(b, 12), entry = b.subarray(16, 8 + esize);
+  let kids = [...children(entry, 78)]; // 78 bytes of fixed VisualSampleEntry fields
+  const old = Object.fromEntries(kids);
+  const avg = old.btrt ? u32(old.btrt, 8) : Math.floor(tr.sizes.reduce((a, s) => a + s, 0) * 8 * tr.timescale / tr.duration);
+  kids = kids.filter(([t]) => t !== 'pasp' && t !== 'btrt');
+  kids.push(['pasp', old.pasp || be(1, 1)], ['btrt', be(0, avg, avg)]);
+  return cat([b.subarray(0, 8), box(etype, cat([entry.subarray(0, 78), ...kids.map(([t, p]) => box(t, p))]))]);
+}
+const rewrite = (u, fn) => cat([...children(u)].map(([t, b]) => { const r = fn(t, b); return r ? box(t, r) : new Uint8Array(0); }));
+
+// read(offset, length) -> Promise<Uint8Array>; returns parts: Uint8Array or [offset, length] ranges of the input
+async function silentPatch(read, fileSize) {
+  let ftyp, moov;
+  for (let p = 0; p < fileSize;) {
+    const h = await read(p, 16);
+    let size = u32(h, 0), hl = 8;
+    const t = str(h, 4);
+    if (size === 1) { size = Number(dv(h).getBigUint64(8)); hl = 16; } else if (size === 0) size = fileSize - p;
+    if (t === 'moof') throw new Error('fragmented MP4 not supported');
+    if (t === 'ftyp') ftyp = await read(p, size);
+    if (t === 'moov') moov = (await read(p, size)).subarray(hl);
+    p += size;
+  }
+  if (!ftyp || !moov) throw new Error('not a valid MP4 (ftyp/moov missing)');
+  const tracks = [...children(moov)].filter(([t]) => t === 'trak').map(([, b]) => trackInfo(b));
+  const video = tracks.findIndex(tr => tr.handler === 'vide');
+  if (video < 0) throw new Error('no video track');
+
+  // interleave by presentation time, video before audio on ties; consecutive video frames share a chunk
+  const ev = [];
+  tracks.forEach((tr, i) => tr.dts.forEach((d, s) => ev.push({ n: d - tr.shift, d: tr.timescale, nv: +(i !== video), i, s })));
+  ev.sort((a, b) => (a.n * b.d - b.n * a.d) || (a.nv - b.nv) || (a.i - b.i) || (a.s - b.s));
+  const chunks = [];
+  for (const { i, s } of ev) {
+    const last = chunks[chunks.length - 1];
+    last && last[0] === i && i === video ? last[1].push(s) : chunks.push([i, [s]]);
+  }
+  const layout = tracks.map(() => []);
+  let rel = 0;
+  for (const [i, ss] of chunks) { layout[i].push([rel, ss.length]); for (const s of ss) rel += tracks[i].sizes[s]; }
+  const v = tracks[video];
+  const nFake = Math.max(0, Math.round(v.duration * FAKE_PER_SEC / v.timescale) - v.sizes.length);
+  for (let k = 0; k < nFake; k++) layout[video].push([rel, 1]);
+
+  const stblFor = (i, base) => {
+    const tr = tracks[i], isV = i === video;
+    const sizes = isV ? tr.sizes.concat(Array(nFake).fill(FAKE.length)) : tr.sizes;
+    const firstFake = isV ? layout[i].length - nFake + 1 : -1, stsc = [];
+    layout[i].forEach(([, n], k) => {
+      if (!stsc.length || stsc[stsc.length - 1][1] !== n || k + 1 === firstFake) stsc.push([k + 1, n, 1]); // own entry for fakes
+    });
+    return cat(tr.stbl.map(([t, b]) => {
+      if (t === 'stts' && isV) { const r = rle(tr.deltas.slice(0, -1).concat([1])); b = be(0, r.length, r); }
+      else if (t === 'stsd' && isV) b = patchStsd(b, tr);
+      else if (t === 'stsz') b = be(0, 0, sizes.length, sizes);
+      else if (t === 'stsc') b = be(0, stsc.length, stsc);
+      else if (t === 'stco' || t === 'co64') { t = 'stco'; b = be(0, layout[i].length, layout[i].map(([o]) => base + o)); }
+      return box(t, b);
+    }));
+  };
+  const moovBytes = base => {
+    let ti = 0;
+    const m = (t, b, i) => {
+      if (t === 'udta' || t === 'meta') return null;
+      if (t === 'mvhd' || t === 'tkhd' || t === 'mdhd') return zeroTimes(b);
+      if (t === 'trak') i = ti++;
+      if (t === 'trak' || t === 'mdia' || t === 'minf') return rewrite(b, (t2, b2) => m(t2, b2, i));
+      if (t === 'stbl') return stblFor(i, base);
+      return b;
+    };
+    return box('moov', rewrite(moov, m));
+  };
+  const head = cat([ftyp, box('free', new Uint8Array(0))]);
+  const base = head.length + moovBytes(0).length + 8, mdatSize = 8 + rel + FAKE.length;
+  if (base + mdatSize >= 2 ** 32) throw new Error('output over 4 GB not supported');
+  const parts = [head, moovBytes(base), cat([be(mdatSize), new TextEncoder().encode('mdat')])];
+  for (const [i, ss] of chunks) for (const s of ss) {
+    const o = tracks[i].offs[s], n = tracks[i].sizes[s], last = parts[parts.length - 1];
+    Array.isArray(last) && last[0] + last[1] === o ? last[1] += n : parts.push([o, n]);
+  }
+  parts.push(FAKE);
+  return { parts, frames: v.sizes.length, fakes: nFake };
+}
+
+if (typeof document !== 'undefined') {
+  const drop = document.getElementById('drop'), pick = document.getElementById('pick'), log = document.getElementById('log');
+  async function run(file) {
+    const li = log.appendChild(document.createElement('li'));
+    li.textContent = file.name + ': working...';
+    try {
+      const read = async (o, n) => new Uint8Array(await file.slice(o, o + n).arrayBuffer());
+      const { parts, frames, fakes } = await silentPatch(read, file.size);
+      const blob = new Blob(parts.map(p => Array.isArray(p) ? file.slice(p[0], p[0] + p[1]) : p), { type: 'video/mp4' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = file.name.replace(/\.[^.]+$/, '') + '_tt.mp4';
+      a.textContent = a.download;
+      li.textContent = `${file.name}: done (${frames} frames + ${fakes} fake samples) `;
+      li.appendChild(a);
+      a.click();
+    } catch (e) {
+      li.textContent = `${file.name}: ERROR ${e.message}`;
+    }
+  }
+  drop.onclick = () => pick.click();
+  pick.onchange = () => [...pick.files].forEach(run);
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); [...e.dataTransfer.files].forEach(run); };
+}
+</script>
+</body>
+</html>
