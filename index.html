@@ -5,18 +5,58 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Silent Method</title>
 <style>
-  body { font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
-  #drop { border: 2px dashed #888; padding: 40px; text-align: center; cursor: pointer; }
-  #drop.over { background: #eee; }
-  li { margin: 6px 0; }
+  :root { --bg: #08080a; --card: #141417; --line: #26262b; --text: #f4f4f5; --mute: #9a9aa3; --accent: #7c5cff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(900px 500px at 50% -10%, #1d1b2e, var(--bg) 70%) var(--bg);
+    color: var(--text); font: 15px/1.5 Inter, "Segoe UI", system-ui, sans-serif; }
+  nav, main { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+  nav { display: flex; justify-content: space-between; align-items: center; height: 64px; font-weight: 700; }
+  nav a { color: var(--mute); text-decoration: none; font-weight: 500; }
+  .logo { display: flex; gap: 10px; align-items: center; }
+  .logo i { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--accent), #2dd4bf); }
+  header { text-align: center; padding: 56px 0 32px; }
+  .badge { display: inline-block; padding: 6px 14px; border: 1px solid var(--line); border-radius: 99px;
+    background: var(--card); color: var(--mute); font-size: 11px; font-weight: 700; letter-spacing: .12em; }
+  h1 { font-size: clamp(36px, 8vw, 60px); line-height: 1.05; letter-spacing: -.04em; margin: 22px 0 14px; }
+  .sub { color: var(--mute); max-width: 520px; margin: 0 auto; }
+  .feats { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; margin-top: 22px; color: var(--mute); font-size: 13px; }
+  .feats span::before { content: "✓ "; color: #2dd4bf; }
+  #drop { margin: 28px 0 16px; padding: 44px 16px; text-align: center; cursor: pointer; border: 1.5px dashed var(--line);
+    border-radius: 22px; background: var(--card); transition: border-color .15s, background .15s; }
+  #drop.over, #drop:hover { border-color: var(--accent); background: #18171f; }
+  .btn { display: inline-block; padding: 12px 22px; border-radius: 99px; background: var(--text); color: #000;
+    font-weight: 700; text-decoration: none; }
+  #drop p { color: var(--mute); margin: 12px 0 0; font-size: 13px; }
+  #log { list-style: none; padding: 0; margin: 0; }
+  #log li { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center;
+    padding: 14px 18px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); font-size: 14px; }
+  #log a { padding: 8px 16px; border-radius: 99px; background: var(--accent); color: #fff; font-weight: 700; text-decoration: none; }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 36px 0; }
+  .steps div { padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--card); }
+  .steps b { display: block; color: var(--accent); font-size: 12px; letter-spacing: .1em; margin-bottom: 4px; }
+  .steps p { margin: 0; color: var(--mute); font-size: 14px; }
+  footer { text-align: center; color: var(--mute); font-size: 12px; padding: 24px 0 48px; }
 </style>
 </head>
 <body>
-<h1>Silent Method</h1>
-<p>Patch an MP4 so TikTok keeps max quality. No re-encode, nothing is uploaded: the file stays in your browser.</p>
-<div id="drop">Drop MP4 here or click to choose<input id="pick" type="file" accept="video/mp4,video/quicktime,.mp4,.mov" multiple hidden></div>
+<nav><span class="logo"><i></i>Silent Method</span><a href="https://github.com/AscendedTweaks/silent-method">GitHub</a></nav>
+<main>
+<header>
+  <span class="badge">FREE · OPEN SOURCE · NO SIGN-UP</span>
+  <h1>Upload in full quality.<br>For free.</h1>
+  <p class="sub">Patches your MP4 right in the browser so TikTok keeps resolution and frame rate. The file never leaves your PC.</p>
+  <div class="feats"><span>No re-encode</span><span>Runs locally</span><span>4K & 60 fps</span><span>Batch</span></div>
+</header>
+<div id="drop"><span class="btn">Choose video</span><p>or drop MP4 / MOV files here</p>
+  <input id="pick" type="file" accept="video/mp4,video/quicktime,.mp4,.mov" multiple hidden></div>
 <ul id="log"></ul>
-<p>Then upload the <b>_tt.mp4</b> on tiktok.com (desktop, TikTok Studio) with "High quality uploads" on.</p>
+<section class="steps">
+  <div><b>STEP 1</b><p>Drop your exported video above.</p></div>
+  <div><b>STEP 2</b><p>Save the <strong>_tt.mp4</strong> it gives you.</p></div>
+  <div><b>STEP 3</b><p>Upload it on tiktok.com (TikTok Studio, desktop) with "High quality uploads" on.</p></div>
+</section>
+</main>
+<footer>Container-only patch. Video and audio stay bit-identical. No guarantee: TikTok can change its pipeline any time.</footer>
 
 <script>
 // Container rewrite (no re-encode): faststart, audio/video interleave per audio frame,
