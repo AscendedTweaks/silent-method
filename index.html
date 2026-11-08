@@ -63,9 +63,9 @@
 <header>
   <span class="chip">FREE · OPEN SOURCE</span>
   <h1>Full quality.<br>Zero cost.</h1>
-  <p class="sub">Patch your MP4 in the browser so TikTok keeps resolution and frame rate. No account, no upload, no re-encode.</p>
+  <p class="sub">Repack your MP4 in the browser into the stream format TikTok plays at 720p60. No account, no upload, no re-encode.</p>
   <div class="pills"><a class="btn w" href="#drop">Patch a video</a><a class="btn g" href="https://github.com/AscendedTweaks/silent-method">View source</a></div>
-  <div class="feats"><span><b>HD</b>Bit-identical frames</span><span><b>4K</b>Up to 4K · 60 fps</span><span><b>1s</b>Done in a second</span><span><b>0</b>No sign-up</span></div>
+  <div class="feats"><span><b>HD</b>Bit-identical frames</span><span><b>60</b>Plays 720p60</span><span><b>1s</b>Done in a second</span><span><b>0</b>No sign-up</span></div>
 </header>
 <div id="drop" class="card"><span class="btn w">Choose video</span><p>or drop MP4 / MOV files here · several at once work</p>
   <input id="pick" type="file" accept="video/mp4,video/quicktime,.mp4,.mov" multiple hidden></div>
@@ -80,22 +80,22 @@
 
 <h2>FAQ</h2>
 <section class="faq">
-  <details class="card"><summary>What does it change?</summary><p>Only the MP4 container: moov first, audio/video interleaving, extra sample-table entries, the bitrate box, timestamps and editor metadata.</p></details>
+  <details class="card"><summary>What does it change?</summary><p>Only the container: video and audio are copied into an MPEG-TS stream. The file keeps its .mp4 name.</p></details>
   <details class="card"><summary>Is my video re-encoded?</summary><p>No. Every video frame and audio sample stays bit-identical.</p></details>
+  <details class="card"><summary>My phone shows 0:00 or plays only sound?</summary><p>Normal. Many galleries can't play this stream format. TikTok reads it fine, upload it as usual.</p></details>
   <details class="card"><summary>Is my file uploaded anywhere?</summary><p>No. It is processed in this tab.</p></details>
-  <details class="card"><summary>Which files work?</summary><p>MP4 or MOV up to 5 minutes and 4 GB, not fragmented.</p></details>
+  <details class="card"><summary>Which files work?</summary><p>MP4 or MOV with H.264 video and AAC audio, up to 5 minutes, not fragmented.</p></details>
   <details class="card"><summary>Does it always work?</summary><p>No guarantee: TikTok can change its pipeline any time. Upload on desktop web, not in the app.</p></details>
 </section>
 </main>
 <footer><div><span>Silent Method · free and open source</span><span>Not affiliated with TikTok.</span></div></footer>
 
 <script>
-// Container rewrite (no re-encode): faststart, audio/video interleave per audio frame,
-// fake 8-byte video samples in stsz/stco up to duration*400 (not in stts, players ignore them),
-// last video frame duration 1, btrt max=avg, pasp 1:1, zeroed timestamps, udta/meta removed.
-const FAKE_PER_SEC = 400;
+// Remux to MPEG-TS, same idea as Zilem's "Zeta 1": video and audio packets are copied, only the container
+// changes. The output keeps the .mp4 name; TikTok reads it, phone galleries often can't play it.
 const MAX_SEC = 300; // 5 min limit per video
-const FAKE = new Uint8Array([0, 0, 0, 4, 0, 0, 0, 0]);
+const VPID = 0x100, APID = 0x101, PMT = 0x1000, START = 1.4 * 90000; // ffmpeg's default 1.4 s start offset
+const SC = new Uint8Array([0, 0, 0, 1]), AUD = new Uint8Array([0, 0, 0, 1, 9, 0xf0]);
 const dv = u => new DataView(u.buffer, u.byteOffset, u.byteLength);
 const str = (u, o) => String.fromCharCode(u[o], u[o + 1], u[o + 2], u[o + 3]);
 const u32 = (u, o) => dv(u).getUint32(o);
@@ -105,17 +105,6 @@ function cat(arrs) {
   let p = 0;
   for (const a of arrs) { out.set(a, p); p += a.length; }
   return out;
-}
-function be(...vals) { // big-endian uint32s, arrays get flattened (no huge spreads)
-  vals = vals.flat(Infinity);
-  const u = new Uint8Array(vals.length * 4), d = dv(u);
-  vals.forEach((v, i) => d.setUint32(i * 4, v));
-  return u;
-}
-function box(type, payload) {
-  const h = be(8 + payload.length, 0);
-  for (let i = 0; i < 4; i++) h[4 + i] = type.charCodeAt(i);
-  return cat([h, payload]);
 }
 function* children(u, start = 0) {
   for (let p = start; p < u.length;) {
@@ -128,21 +117,15 @@ function* children(u, start = 0) {
 function find(u, ...path) {
   for (const [t, b] of children(u)) if (t === path[0]) return path.length === 1 ? b : find(b, ...path.slice(1));
 }
-function rle(vals) {
-  const out = [];
-  for (const v of vals) out.length && out[out.length - 1][1] === v ? out[out.length - 1][0]++ : out.push([1, v]);
-  return out;
-}
-const zeroTimes = b => { const c = b.slice(), n = b[0] === 0 ? 8 : 16; c.fill(0, 4, 4 + n); return c; };
 
 function trackInfo(trak) {
-  const stbl = [...children(find(trak, 'mdia', 'minf', 'stbl'))], st = Object.fromEntries(stbl);
+  const st = Object.fromEntries(children(find(trak, 'mdia', 'minf', 'stbl')));
   const mdhd = find(trak, 'mdia', 'mdhd'), md = dv(mdhd);
   const [timescale, duration] = mdhd[0] === 0 ? [md.getUint32(12), md.getUint32(16)] : [md.getUint32(20), Number(md.getBigUint64(24))];
   const deltas = [];
   for (let k = 0, s = st.stts; k < u32(s, 4); k++) for (let c = u32(s, 8 + 8 * k), d = u32(s, 12 + 8 * k); c--;) deltas.push(d);
   const z = st.stsz, ss = u32(z, 4), n = u32(z, 8), sizes = [];
-  for (let k = 0; k < Math.min(n, deltas.length); k++) sizes.push(ss || u32(z, 12 + 4 * k)); // only timed samples: re-patching works
+  for (let k = 0; k < Math.min(n, deltas.length); k++) sizes.push(ss || u32(z, 12 + 4 * k)); // only timed samples
   const chunks = [];
   if (st.stco) for (let k = 0; k < u32(st.stco, 4); k++) chunks.push(u32(st.stco, 8 + 4 * k));
   else for (let k = 0; k < u32(st.co64, 4); k++) chunks.push(Number(dv(st.co64).getBigUint64(8 + 8 * k)));
@@ -160,95 +143,128 @@ function trackInfo(trak) {
     const t = elst[0] === 0 ? dv(elst).getInt32(12 + 8 * k) : Number(dv(elst).getBigInt64(16 + 16 * k));
     if (t !== -1) { shift = t; break; }
   }
-  const dts = [];
+  const dts = [], cts = sizes.map(() => 0);
   deltas.reduce((t, d) => (dts.push(t), t + d), 0);
-  return { handler: str(find(trak, 'mdia', 'hdlr'), 8), stbl, timescale, duration, deltas, sizes, offs, shift, dts };
+  if (st.ctts) for (let k = 0, i = 0; k < u32(st.ctts, 4); k++) for (let c = u32(st.ctts, 8 + 8 * k), o = dv(st.ctts).getInt32(12 + 8 * k); c--;) cts[i++] = o;
+  const keys = st.stss && new Set(Array.from({ length: u32(st.stss, 4) }, (_, k) => u32(st.stss, 8 + 4 * k)));
+  return { handler: str(find(trak, 'mdia', 'hdlr'), 8), codec: str(st.stsd, 12), entry: st.stsd.subarray(16, 8 + u32(st.stsd, 8)),
+    timescale, duration, sizes, offs, shift, dts, cts, keys };
 }
 
-function patchStsd(b, tr) {
-  const esize = u32(b, 8), etype = str(b, 12), entry = b.subarray(16, 8 + esize);
-  let kids = [...children(entry, 78)]; // 78 bytes of fixed VisualSampleEntry fields
-  const old = Object.fromEntries(kids);
-  const avg = old.btrt ? u32(old.btrt, 8) : Math.floor(tr.sizes.reduce((a, s) => a + s, 0) * 8 * tr.timescale / tr.duration);
-  kids = kids.filter(([t]) => t !== 'pasp' && t !== 'btrt');
-  kids.push(['pasp', old.pasp || be(1, 1)], ['btrt', be(0, avg, avg)]);
-  return cat([b.subarray(0, 8), box(etype, cat([entry.subarray(0, 78), ...kids.map(([t, p]) => box(t, p))]))]);
+function avcConfig(entry) { // NAL length size + SPS/PPS as Annex-B, from avcC
+  const c = find(entry.subarray(78), 'avcC'); // 78 bytes of fixed VisualSampleEntry fields
+  const ps = [];
+  let p = 5;
+  for (let r = 0; r < 2; r++) for (let n = r ? c[p++] : c[p++] & 31; n--;) {
+    const len = c[p] << 8 | c[p + 1];
+    ps.push(SC, c.subarray(p + 2, p + 2 + len));
+    p += 2 + len;
+  }
+  return { nl: (c[4] & 3) + 1, ps: cat(ps) };
 }
-const rewrite = (u, fn) => cat([...children(u)].map(([t, b]) => { const r = fn(t, b); return r ? box(t, r) : new Uint8Array(0); }));
+function annexB(sample, { nl, ps }, key) {
+  const out = key ? [AUD, ps] : [AUD];
+  for (let p = 0; p + nl <= sample.length;) {
+    let n = 0;
+    for (let k = 0; k < nl; k++) n = n * 256 + sample[p + k];
+    p += nl;
+    if ((sample[p] & 31) !== 9) out.push(SC, sample.subarray(p, p + n)); // own AUD already added
+    p += n;
+  }
+  return cat(out);
+}
+function adtsMaker(entry) { // frame length -> 7-byte ADTS header, from the esds AudioSpecificConfig
+  const ver = entry[8] << 8 | entry[9];
+  const e = find(entry.subarray(28 + (ver === 1 ? 16 : ver === 2 ? 36 : 0)), 'esds');
+  let p = 4;
+  const desc = () => { p++; let b; do b = e[p++]; while (b & 128); };
+  desc(); const fl = e[p + 2]; p += 3; // ES_Descriptor
+  if (fl & 128) p += 2;
+  if (fl & 64) p += 1 + e[p];
+  if (fl & 32) p += 2;
+  desc(); p += 13; // DecoderConfigDescriptor
+  desc(); // AudioSpecificConfig; shortcut: plain AAC object types only (no escape value 31)
+  const obj = e[p] >> 3, freq = (e[p] & 7) << 1 | e[p + 1] >> 7, ch = e[p + 1] >> 3 & 15;
+  return n => { const l = n + 7; return new Uint8Array([0xff, 0xf1, (obj - 1) << 6 | freq << 2 | ch >> 2, (ch & 3) << 6 | l >> 11, l >> 3 & 255, (l & 7) << 5 | 31, 0xfc]); };
+}
 
-// read(offset, length) -> Promise<Uint8Array>; returns parts: Uint8Array or [offset, length] ranges of the input
+function crc32(bytes) { // MPEG-2 CRC for PAT/PMT
+  let c = -1;
+  for (const b of bytes) { c ^= b << 24; for (let k = 0; k < 8; k++) c = c & 0x80000000 ? c << 1 ^ 0x04c11db7 : c << 1; }
+  return c >>> 0;
+}
+function section(tableId, body) { // pointer_field + PSI section with CRC
+  const s = cat([new Uint8Array([tableId, 0xb0 | (body.length + 9) >> 8, (body.length + 9) & 255, 0, 1, 0xc1, 0, 0]), body]);
+  const c = crc32(s);
+  return cat([new Uint8Array([0]), s, new Uint8Array([c >>> 24, c >> 16 & 255, c >> 8 & 255, c & 255])]);
+}
+function ts(cc, pid, data, pcr) { // one PES or section -> whole 188-byte packets, last one stuffed via adaptation field
+  const afFirst = pcr === undefined ? 0 : 8, n = Math.max(1, Math.ceil((data.length + afFirst) / 184));
+  const out = new Uint8Array(n * 188);
+  for (let i = 0, p = 0; i < n; i++) {
+    const o = i * 188, af = i ? 0 : afFirst, take = Math.min(184 - af, data.length - p), stuff = 184 - af - take;
+    cc[pid] = ((cc[pid] ?? 15) + 1) & 15;
+    out.set([0x47, (i ? 0 : 0x40) | pid >> 8, pid & 255, (af || stuff ? 0x30 : 0x10) | cc[pid]], o);
+    let q = o + 4;
+    if (af || stuff) {
+      out[q++] = af + stuff - 1;
+      if (af + stuff > 1) {
+        out[q++] = af ? 0x10 : 0;
+        if (af) { out.set([pcr >>> 25, pcr >>> 17 & 255, pcr >>> 9 & 255, pcr >>> 1 & 255, (pcr & 1) << 7 | 0x7e, 0], q); q += 6; }
+        out.fill(0xff, q, o + 4 + af + stuff);
+        q = o + 4 + af + stuff;
+      }
+    }
+    out.set(data.subarray(p, p + take), q);
+    p += take;
+  }
+  return out;
+}
+const stamp = (pre, t) => [pre << 4 | (t / 2 ** 30 & 7) << 1 | 1, t >> 22 & 255, (t >> 15 & 127) << 1 | 1, t >> 7 & 255, (t & 127) << 1 | 1];
+function pes(sid, pts, dts, payload) {
+  const two = pts !== dts, hl = two ? 10 : 5, len = sid === 0xe0 ? 0 : 3 + hl + payload.length; // video: unbounded length
+  return cat([new Uint8Array([0, 0, 1, sid, len >> 8, len & 255, 0x80, two ? 0xc0 : 0x80, hl, ...stamp(two ? 3 : 2, pts), ...(two ? stamp(1, dts) : [])]), payload]);
+}
+
+// read(offset, length) -> Promise<Uint8Array>; returns the output as Uint8Array parts
 async function silentPatch(read, fileSize) {
-  let ftyp, moov;
+  let moov;
   for (let p = 0; p < fileSize;) {
     const h = await read(p, 16);
     let size = u32(h, 0), hl = 8;
     const t = str(h, 4);
     if (size === 1) { size = Number(dv(h).getBigUint64(8)); hl = 16; } else if (size === 0) size = fileSize - p;
     if (t === 'moof') throw new Error('fragmented MP4 not supported');
-    if (t === 'ftyp') ftyp = await read(p, size);
     if (t === 'moov') moov = (await read(p, size)).subarray(hl);
     p += size;
   }
-  if (!ftyp || !moov) throw new Error('not a valid MP4 (ftyp/moov missing)');
+  if (!moov) throw new Error('not a valid MP4 (moov missing)');
   const tracks = [...children(moov)].filter(([t]) => t === 'trak').map(([, b]) => trackInfo(b));
-  const video = tracks.findIndex(tr => tr.handler === 'vide');
-  if (video < 0) throw new Error('no video track');
-  if (tracks[video].duration / tracks[video].timescale > MAX_SEC) throw new Error('video longer than 5 minutes');
+  const v = tracks.find(tr => tr.handler === 'vide'), a = tracks.find(tr => tr.handler === 'soun');
+  if (!v) throw new Error('no video track');
+  if (v.duration / v.timescale > MAX_SEC) throw new Error('video longer than 5 minutes');
+  if (!/^avc[13]$/.test(v.codec)) throw new Error('only H.264 video supported'); // shortcut: HEVC needs hvcC + stream type 0x24
+  if (a && a.codec !== 'mp4a') throw new Error('only AAC audio supported');
+  const avc = avcConfig(v.entry), adts = a && adtsMaker(a.entry);
 
-  // interleave by presentation time, video before audio on ties; consecutive video frames share a chunk
-  const ev = [];
-  tracks.forEach((tr, i) => tr.dts.forEach((d, s) => ev.push({ n: d - tr.shift, d: tr.timescale, nv: +(i !== video), i, s })));
-  ev.sort((a, b) => (a.n * b.d - b.n * a.d) || (a.nv - b.nv) || (a.i - b.i) || (a.s - b.s));
-  const chunks = [];
-  for (const { i, s } of ev) {
-    const last = chunks[chunks.length - 1];
-    last && last[0] === i && i === video ? last[1].push(s) : chunks.push([i, [s]]);
-  }
-  const layout = tracks.map(() => []);
-  let rel = 0;
-  for (const [i, ss] of chunks) { layout[i].push([rel, ss.length]); for (const s of ss) rel += tracks[i].sizes[s]; }
-  const v = tracks[video];
-  const nFake = Math.max(0, Math.round(v.duration * FAKE_PER_SEC / v.timescale) - v.sizes.length);
-  for (let k = 0; k < nFake; k++) layout[video].push([rel, 1]);
+  const pat = section(0, new Uint8Array([0, 1, 0xe0 | PMT >> 8, PMT & 255]));
+  const pmt = section(2, new Uint8Array([0xe0 | VPID >> 8, VPID & 255, 0xf0, 0, 0x1b, 0xe0 | VPID >> 8, VPID & 255, 0xf0, 0,
+    ...(a ? [0x0f, 0xe0 | APID >> 8, APID & 255, 0xf0, 0] : [])]));
+  const ev = []; // all samples in decode order, video first on ties
+  for (const tr of [v, a]) if (tr) tr.dts.forEach((d, s) => ev.push({ t: (d - tr.shift) / tr.timescale, tr, s }));
+  ev.sort((x, y) => x.t - y.t || (x.tr !== v) - (y.tr !== v) || x.s - y.s);
 
-  const stblFor = (i, base) => {
-    const tr = tracks[i], isV = i === video;
-    const sizes = isV ? tr.sizes.concat(Array(nFake).fill(FAKE.length)) : tr.sizes;
-    const firstFake = isV ? layout[i].length - nFake + 1 : -1, stsc = [];
-    layout[i].forEach(([, n], k) => {
-      if (!stsc.length || stsc[stsc.length - 1][1] !== n || k + 1 === firstFake) stsc.push([k + 1, n, 1]); // own entry for fakes
-    });
-    return cat(tr.stbl.map(([t, b]) => {
-      if (t === 'stts' && isV) { const r = rle(tr.deltas.slice(0, -1).concat([1])); b = be(0, r.length, r); }
-      else if (t === 'stsd' && isV) b = patchStsd(b, tr);
-      else if (t === 'stsz') b = be(0, 0, sizes.length, sizes);
-      else if (t === 'stsc') b = be(0, stsc.length, stsc);
-      else if (t === 'stco' || t === 'co64') { t = 'stco'; b = be(0, layout[i].length, layout[i].map(([o]) => base + o)); }
-      return box(t, b);
-    }));
-  };
-  const moovBytes = base => {
-    let ti = 0;
-    const m = (t, b, i) => {
-      if (t === 'udta' || t === 'meta') return null;
-      if (t === 'mvhd' || t === 'tkhd' || t === 'mdhd') return zeroTimes(b);
-      if (t === 'trak') i = ti++;
-      if (t === 'trak' || t === 'mdia' || t === 'minf') return rewrite(b, (t2, b2) => m(t2, b2, i));
-      if (t === 'stbl') return stblFor(i, base);
-      return b;
-    };
-    return box('moov', rewrite(moov, m));
-  };
-  const head = cat([ftyp, box('free', new Uint8Array(0))]);
-  const base = head.length + moovBytes(0).length + 8, mdatSize = 8 + rel + FAKE.length;
-  if (base + mdatSize >= 2 ** 32) throw new Error('output over 4 GB not supported');
-  const parts = [head, moovBytes(base), cat([be(mdatSize), new TextEncoder().encode('mdat')])];
-  for (const [i, ss] of chunks) for (const s of ss) {
-    const o = tracks[i].offs[s], n = tracks[i].sizes[s], last = parts[parts.length - 1];
-    Array.isArray(last) && last[0] + last[1] === o ? last[1] += n : parts.push([o, n]);
+  const cc = {}, parts = [];
+  let lastPsi = -Infinity;
+  for (const { t, tr, s } of ev) {
+    const data = await read(tr.offs[s], tr.sizes[s]), d90 = Math.round(t * 90000), dts = d90 + START;
+    if (d90 - lastPsi >= 9000) { parts.push(ts(cc, 0, pat), ts(cc, PMT, pmt)); lastPsi = d90; } // PAT/PMT every 0.1 s
+    if (tr === v) {
+      const pts = dts + Math.round(tr.cts[s] * 90000 / tr.timescale);
+      parts.push(ts(cc, VPID, pes(0xe0, pts, dts, annexB(data, avc, !tr.keys || tr.keys.has(s + 1))), Math.max(0, d90)));
+    } else parts.push(ts(cc, APID, pes(0xc0, dts, dts, cat([adts(data.length), data]))));
   }
-  parts.push(FAKE);
-  return { parts, frames: v.sizes.length, fakes: nFake };
+  return { parts, frames: v.sizes.length };
 }
 
 if (typeof document !== 'undefined') {
@@ -258,13 +274,13 @@ if (typeof document !== 'undefined') {
     li.textContent = file.name + ': working...';
     try {
       const read = async (o, n) => new Uint8Array(await file.slice(o, o + n).arrayBuffer());
-      const { parts, frames, fakes } = await silentPatch(read, file.size);
-      const blob = new Blob(parts.map(p => Array.isArray(p) ? file.slice(p[0], p[0] + p[1]) : p), { type: 'video/mp4' });
+      const { parts, frames } = await silentPatch(read, file.size);
+      const blob = new Blob(parts, { type: 'video/mp4' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = file.name.replace(/\.[^.]+$/, '') + '_tt.mp4';
       a.textContent = a.download;
-      li.textContent = `${file.name}: done (${frames} frames + ${fakes} fake samples) `;
+      li.textContent = `${file.name}: done (${frames} frames) `;
       li.appendChild(a);
       a.click();
     } catch (e) {

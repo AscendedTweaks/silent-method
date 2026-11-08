@@ -10,10 +10,6 @@ Free, open-source alternative to paid "TikTok upload methods". Patches an MP4 so
 
 ## What it changes (container only)
 
-- `moov` before `mdat` (faststart), audio/video interleaved per audio frame
-- fake 8-byte video samples in `stsz`/`stco` up to duration × 400 (not in `stts`, so players ignore them)
-- last video frame duration 1 in `stts`
-- `btrt` max bitrate = average bitrate, `pasp` 1:1
-- creation/modification times zeroed, `udta`/`meta` removed (e.g. CapCut tags)
+The video and audio packets are copied unchanged into an MPEG-TS stream (H.264 + AAC, ffmpeg-style PIDs and 1.4 s start offset). The file keeps its `.mp4` name. TikTok reads it and plays it at 720p60; phone galleries often show 0:00 or only play the sound.
 
-Limits: MP4/MOV, max 5 minutes, max 4 GB, no fragmented MP4. No guarantee: TikTok can change its pipeline any time.
+Limits: H.264 video, AAC audio, max 5 minutes, no fragmented MP4. No guarantee: TikTok can change its pipeline any time.
